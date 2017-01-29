@@ -1,0 +1,137 @@
+/*
+ * mm-naive.c - The fastest, least memory-efficient malloc package.
+ * 
+ * In this naive approach, a block is allocated by simply incrementing
+ * the brk pointer.  A block is pure payload. There are no headers or
+ * footers.  Blocks are never coalesced or reused. Realloc is
+ * implemented directly using mm_malloc and mm_free.
+ *
+ * NOTE TO STUDENTS: Replace this header comment with your own header
+ * comment that gives a high level description of your solution.
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <assert.h>
+#include <unistd.h>
+#include <string.h>
+
+#include "mm.h"
+#include "memlib.h"
+
+/*********************************************************
+ * NOTE TO STUDENTS: Before you do anything else, please
+ * provide your team information in the following struct.
+ ********************************************************/
+team_t team = {
+	/* Team name */
+	"123456789",
+	/* First member's full name */
+	"YeXiaoRain",
+	/* First member's email address */
+	"your_name@sjtu.edu.cn",
+	/* Second member's full name (leave blank if none) */
+	"",
+	/* Second member's email address (leave blank if none) */
+	""
+};
+
+/* single word (4) or double word (8) alignment */
+#define ALIGNMENT 8
+
+/* rounds up to the nearest multiple of ALIGNMENT */
+#define ALIGN(size) (((size) + (ALIGNMENT-1)) & ~0x7)
+
+#define GET(p) (*(size_t *)(p))
+#define PUT(p, val) (*(size_t *)(p) = (val))
+#define GET_SIZE(p) (GET(p) & ~0x7)
+#define GET_ALLOC(p) (GET(p) & 0x1)
+#define HDRP(bp) ((int *)(bp) - 2)
+
+#define PWR (20) 
+#define START_V (1<<4)
+#define OVERHEAD 8
+static int *heap_listp ; 
+
+int mm_init(void)
+{
+	if ((heap_listp = mem_sbrk(sizeof(int)*PWR)) == (void *)-1) {
+		return -1;
+	}
+	int i;
+	for(i=0;i<PWR;i++)
+		PUT(heap_listp+i,0);	//START_V*2^i - OVERHEAD
+	return 0;
+}
+int get_index(size_t value){
+	int index=0;
+	size_t cmp_size=START_V;
+	for(index=0;index<PWR;index++){
+		if(cmp_size - OVERHEAD >=value)
+			break;
+		cmp_size<<=1;
+	}
+	return index;
+}
+/* 
+ * mm_malloc - Allocate a block by incrementing the brk pointer.
+ *	 Always allocate a block whose size is a multiple of the alignment.
+ */
+void *mm_malloc(size_t size)
+{
+	int index=get_index(size);
+	size=START_V<<index;
+	
+	int* newPtr;
+	newPtr = (int *)(*(heap_listp + index));
+	if (!newPtr) {
+		if ((newPtr = mem_sbrk(size)) == (void *)-1 )
+		{
+			return NULL;
+		}
+		PUT(newPtr, size - OVERHEAD);
+	}
+	else{
+		*((int**) heap_listp + index) = (int*)*(newPtr + 1);
+	}
+	return (void*)((int*) newPtr + 2);
+}
+
+/*
+ * mm_free - Freeing a block does nothing.
+ */
+void mm_free(void *ptr)
+{
+	int index = get_index(GET_SIZE(HDRP(ptr)));
+	int* listPtr;
+	listPtr = (heap_listp + index);
+	*((int*) ptr - 1) = *listPtr;
+	*((int**) listPtr) = (int*) ptr - 2;
+}
+
+/*
+ * mm_realloc - Implemented simply in terms of mm_malloc and mm_free
+ */
+void *mm_realloc(void *ptr, size_t size)
+{
+	if(size==0){
+		mm_free(ptr);
+		return NULL;
+	}
+	if(ptr==NULL)
+		return mm_malloc(size);
+	void *oldPtr = ptr;
+	void *newPtr;
+	size_t copySize;
+	copySize = GET_SIZE(HDRP(oldPtr));
+	if (size > copySize) {
+		if( (newPtr = mm_malloc(size))==NULL){
+			return NULL;
+		}
+		memcpy(newPtr, oldPtr, copySize);
+		mm_free(oldPtr);
+		return newPtr;
+	}
+	else {
+		return oldPtr;
+	}
+}
